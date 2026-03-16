@@ -43,6 +43,7 @@ HELP_TEXT = """\
 **Bot 管理：**
 `/help` — 显示此帮助
 `/new` 或 `/clear` — 开始新 session
+`/stop` — 停止当前正在运行的任务
 `/resume` — 查看历史 sessions / `/resume [序号]` 恢复
 `/model [名称]` — 切换模型（opus / sonnet / haiku 或完整 ID）
 `/mode [模式]` — 切换权限模式（default / plan / acceptEdits / bypassPermissions）
