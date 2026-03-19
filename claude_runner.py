@@ -11,6 +11,15 @@ from typing import Callable, Optional
 from bot_config import PERMISSION_MODE, CLAUDE_CLI
 
 
+def _normalize_model(model: Optional[str]) -> Optional[str]:
+    if not model:
+        return None
+    normalized = model.strip()
+    if normalized.lower() in {"default", "auto"}:
+        return None
+    return normalized
+
+
 async def run_claude(
     message: str,
     session_id: Optional[str] = None,
@@ -37,8 +46,9 @@ async def run_claude(
     ]
     if session_id:
         cmd += ["--resume", session_id]
-    if model:
-        cmd += ["--model", model]
+    normalized_model = _normalize_model(model)
+    if normalized_model:
+        cmd += ["--model", normalized_model]
 
     env = os.environ.copy()
     env.pop("CLAUDECODE", None)

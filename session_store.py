@@ -12,6 +12,13 @@ from bot_config import SESSIONS_DIR, DEFAULT_MODEL, DEFAULT_CWD, PERMISSION_MODE
 CLAUDE_PROJECTS_DIR = os.path.expanduser("~/.claude/projects")
 
 
+def _api_summary_model() -> str:
+    model = (DEFAULT_MODEL or "").strip()
+    if not model or model.lower() in {"default", "auto"}:
+        return "sonnet"
+    return model
+
+
 def scan_cli_sessions(limit: int = 30) -> list[dict]:
     """
     扫描 ~/.claude/projects/ 下所有 session .jsonl 文件。
@@ -198,7 +205,7 @@ def generate_summary(session_id: str, token: Optional[str] = None) -> str:
         return ""
 
     body = json.dumps({
-        "model": "claude-sonnet-4-6",
+        "model": _api_summary_model(),
         "max_tokens": 80,
         "messages": [{"role": "user", "content": (
             "请用一句话（15-25个字）总结以下对话的主题。"
@@ -406,7 +413,7 @@ class SessionStore:
                     old_title = ""
         user["current"] = {
             "session_id": None,
-            "model": cur.get("model", DEFAULT_MODEL),
+            "model": DEFAULT_MODEL,
             "cwd": cur.get("cwd", DEFAULT_CWD),
             "permission_mode": cur.get("permission_mode", PERMISSION_MODE),
             "started_at": datetime.now().isoformat(),

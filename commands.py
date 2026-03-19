@@ -11,7 +11,7 @@ import sys
 from datetime import datetime
 from typing import Optional, Tuple
 
-from bot_config import CLAUDE_CLI
+from bot_config import CLAUDE_CLI, DEFAULT_MODEL
 from session_store import SessionStore, scan_cli_sessions, generate_summary, _get_api_token, _write_custom_title
 
 PLUGINS_DIR = os.path.expanduser("~/.claude/plugins")
@@ -32,9 +32,10 @@ MODE_ALIASES = {
 }
 
 MODEL_ALIASES = {
-    "opus": "claude-opus-4-6",
-    "sonnet": "claude-sonnet-4-6",
-    "haiku": "claude-haiku-4-5-20251001",
+    "default": "default",
+    "opus": "opus",
+    "sonnet": "sonnet",
+    "haiku": "haiku",
 }
 
 HELP_TEXT = """\
@@ -45,7 +46,7 @@ HELP_TEXT = """\
 `/new` 或 `/clear` — 开始新 session
 `/stop` — 停止当前正在运行的任务
 `/resume` — 查看历史 sessions / `/resume [序号]` 恢复
-`/model [名称]` — 切换模型（opus / sonnet / haiku 或完整 ID）
+`/model [名称]` — 切换模型（default / opus / sonnet / haiku 或完整 ID）
 `/mode [模式]` — 切换权限模式（default / plan / acceptEdits / bypassPermissions）
 `/status` — 显示当前 session 信息
 `/cd [路径]` — 切换工具执行的工作目录
@@ -284,8 +285,10 @@ def _get_usage() -> str:
     except Exception as e:
         return f"❌ 读取凭证失败：{e}"
 
+    probe_model = DEFAULT_MODEL if DEFAULT_MODEL.lower() not in {"default", "auto"} else "haiku"
+
     body = json.dumps({
-        "model": "claude-haiku-4-5-20251001",
+        "model": probe_model,
         "max_tokens": 1,
         "messages": [{"role": "user", "content": "hi"}],
     }).encode()
@@ -419,7 +422,10 @@ def handle_command(
     elif cmd == "model":
         if not args:
             cur = store.get_current(user_id)
-            return f"当前模型：`{cur.model}`\n可用：opus / sonnet / haiku 或完整模型 ID"
+            return (
+                f"当前模型：`{cur.model}`\n"
+                "可用：default / opus / sonnet / haiku 或完整模型 ID"
+            )
         model = MODEL_ALIASES.get(args.lower(), args)
         store.set_model(user_id, model)
         return f"✅ 已切换模型为 `{model}`"

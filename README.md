@@ -15,6 +15,7 @@
 - **图片识别** - 直接发截图给 Claude 分析
 - **斜杠命令** - 在飞书里切换模型、恢复会话、查看用量
 - **Claude Skills 透传** - `/commit`、`/review` 等 Claude Skills 直接在飞书里用
+- **本地 HTTP Bridge** - 提供 `/send`、`/poll` 接口给外部 skill 做审批/回复
 
 ## 命令速查
 
@@ -22,7 +23,7 @@
 |------|------|
 | `/new` | 开始新 session |
 | `/resume` | 查看/恢复历史 session |
-| `/model opus` | 切换模型 (opus / sonnet / haiku) |
+| `/model sonnet` | 切换模型 (`default` / `opus` / `sonnet` / `haiku` / 自定义 ID) |
 | `/status` | 当前 session 信息 |
 | `/cd ~/project` | 切换工作目录 |
 | `/usage` | 查看 Claude Max 用量 (macOS) |
@@ -42,6 +43,7 @@
 ```
 
 飞书通过 WebSocket 推送消息到本机进程，进程调用 `claude` CLI 的 `--print --output-format stream-json` 模式获取流式输出，再通过飞书卡片消息的 patch API 实时更新内容。
+同一进程还会启动一个本地 HTTP bridge，默认监听 `127.0.0.1:5003`，用于把 skill 的交互请求转成飞书私聊消息，并等待用户回复。
 
 ## 完整特性
 
@@ -139,11 +141,63 @@ python main.py
 |------|:---:|-------|------|
 | `FEISHU_APP_ID` | 是 | - | 飞书应用 App ID |
 | `FEISHU_APP_SECRET` | 是 | - | 飞书应用 App Secret |
-| `DEFAULT_MODEL` | 否 | `claude-sonnet-4-6` | 默认使用的 Claude 模型 |
+| `DEFAULT_MODEL` | 否 | `default` | 默认使用的 Claude 模型；设为 `default` 时跟随本机 Claude CLI 默认模型 |
 | `DEFAULT_CWD` | 否 | `~` | Claude CLI 的默认工作目录 |
 | `PERMISSION_MODE` | 否 | `bypassPermissions` | 工具权限模式 |
 | `STREAM_CHUNK_SIZE` | 否 | `20` | 流式推送的字符积累阈值 |
 | `CLAUDE_CLI_PATH` | 否 | 自动查找 | Claude CLI 可执行文件路径 |
+| `BRIDGE_HOST` | 否 | `127.0.0.1` | 本地 interactive bridge 监听地址 |
+| `BRIDGE_PORT` | 否 | `5003` | 本地 interactive bridge 监听端口 |
+| `BRIDGE_DEFAULT_OPEN_ID` | 否 | 空 | `/send` 未显式传 `open_id` 时的默认飞书用户 |
+
+### Interactive Bridge API
+
+桥接服务启动后会暴露本地 HTTP 接口：
+
+```bash
+curl -s http://127.0.0.1:5003/health
+```
+
+获取默认或最近活跃的飞书 `open_id`：
+
+```bash
+curl -s http://127.0.0.1:5003/get_id
+```
+
+发送一条交互请求到飞书私聊：
+
+```bash
+curl -s -X POST http://127.0.0.1:5003/send \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "checkpoint",
+    "title": "继续执行吗？",
+    "body": "准备修改 3 个文件并运行测试。",
+    "options": ["approve", "reject", "custom"]
+  }'
+```
+
+返回示例：
+
+```json
+{"ok": true, "request_id": "...", "message_id": "...", "target_open_id": "ou_xxx"}
+```
+
+等待用户在飞书私聊中的回复，可按 `request_id` 或 `message_id` 轮询：
+
+```bash
+curl -s "http://127.0.0.1:5003/poll?timeout=300&message_id=om_xxx"
+```
+
+也支持外部系统主动回填回复：
+
+```bash
+curl -s -X POST http://127.0.0.1:5003/reply \
+  -H "Content-Type: application/json" \
+  -d '{"message_id": "om_xxx", "text": "approve"}'
+```
+
+如果需要显式指定接收人，可在 `/send` 中附带 `"open_id": "ou_xxx"`。未指定时会优先使用 `BRIDGE_DEFAULT_OPEN_ID`，否则回退到最近一个和 bot 私聊过的用户。
 
 ### 持久化运行
 
